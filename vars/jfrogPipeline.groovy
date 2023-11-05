@@ -67,6 +67,9 @@ def call(Map pipelineParams) {
             HELM_PATH = "${WORKSPACE}/i27-shared-lib/chart"
             DEV_ENV = "dev"
             TST_ENV = "tst"
+            JFROG_DOCKER_REGISTRY = "gap2023.jfrog.io"
+            JFROG_DOCKER_IMAGE_NAME = "gap2023.jfrog.io/docker/eureka"
+            JFROG_DOCKER_CREDS = credentials('jfrog_creds')
         }
         stages {
             stage ('Checkout') {
@@ -163,7 +166,8 @@ def call(Map pipelineParams) {
                 }
                 steps {
                     script  {
-                        dockerBuildandPush().call()
+                        dockerBuildandPushJfrog().call()
+                        //dockerBuildandPush().call()
                     }
                 }
             }
@@ -307,7 +311,8 @@ def imageValidation() {
     return {
         println("Pulling the Docker image")
         try {
-            sh "docker pull ${env.DOCKER_HUB}/${env.DOCKER_REPO}:${env.DOCKER_IMAGE_TAG}"
+            sh "docker pull ${env.JFROG_DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+            //sh "docker pull ${env.DOCKER_HUB}/${env.DOCKER_REPO}:${env.DOCKER_IMAGE_TAG}"
             println ("Pull Success,!!! Deploying !!!!!") 
         }
         catch (Exception e) {
@@ -315,7 +320,8 @@ def imageValidation() {
             println("So, Building the app, creating the image and pushing to registry")
             //buildApp().call()
             docker.buildApp("${env.APPLICATION_NAME}")
-            dockerBuildandPush().call()
+            //dockerBuildandPush().call()
+            dockerBuildandPushJfrog.call()
         }
     }
 }
@@ -336,3 +342,26 @@ def dockerBuildandPush() {
         sh "docker push ${env.DOCKER_HUB}/${env.DOCKER_REPO}:${env.DOCKER_IMAGE_TAG}"
     }
 }
+
+def dockerBuildandPushJfrog() {
+    return {
+        
+        sh "cp ${workspace}/target/i27-${env.APPLICATION_NAME}-${env.POM_VERSION}.${env.POM_PACKAGING} ./.cicd"
+        echo "listing files in .cicd folder"
+        sh "ls -la ./.cicd"
+        echo "******************** Building Docker Image ********************"
+        
+        sh "docker build --force-rm --no-cache --pull --rm=true --build-arg JAR_SOURCE=i27-${env.APPLICATION_NAME}-${env.POM_VERSION}.${env.POM_PACKAGING} --build-arg JAR_DEST=i27-${env.APPLICATION_NAME}-${currentBuild.number}-${BRANCH_NAME}.${env.POM_PACKAGING} \
+            -t ${env.JFROG_DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG} ./.cicd"
+        
+        echo "******************** Logging to Docker JFROG Registry ********************"
+        sh "docker login ${env.JFROG_DOCKER_REGISTRY} -u ${JFROG_DOCKER_CREDS_USR} -p ${JFROG_DOCKER_CREDS_PSW}"
+        sh "docker push ${env.JFROG_DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+        //sh "docker login -u ${DOCKER_CREDS_USR} -p ${DOCKER_CREDS_PSW}"
+        //sh "docker push ${env.JFROG_DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+    }
+}
+
+
+// devopswithcloudhub/i27eurekaproject:2325f89
+//gap2023.jfrog.io/docker/eurka:tagname
